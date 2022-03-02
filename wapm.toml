@@ -1,0 +1,19 @@
+[package]
+name = "calcit/wasi-calcit"
+version = "0.0.1"
+description = "CLI for Calcit language"
+license = "MIT"
+
+[dependencies]
+
+[[module]]
+name = "wasi-calcit"
+source = "builds/wasi-calcit.wasm"
+abi = "wasi"
+
+[module.interfaces]
+wasi = "0.1.0-unstable"
+
+[[command]]
+name = "wcr"
+module = "wasi-calcit"
