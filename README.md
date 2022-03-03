@@ -7,7 +7,9 @@
 ```bash
 wapm install calcit/wasi-calcit
 
-wcr # trys to run `examples/compact.cirru`
+wcr # trys to run `compact.cirru`
+
+wcr -e 'range 100' # eval mode
 ```
 
 _TODO_

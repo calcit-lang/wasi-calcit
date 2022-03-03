@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use im_ternary_tree::TernaryTreeList;
 
-use calcit_runner::{
+use calcit::{
   builtins,
   call_stack::CallStackList,
   cli_args,
@@ -24,7 +24,7 @@ fn main() -> Result<(), String> {
 
   println!("calcit version: {}", cli_args::CALCIT_VERSION);
 
-  let core_snapshot = calcit_runner::load_core_snapshot()?;
+  let core_snapshot = calcit::load_core_snapshot()?;
 
   let mut snapshot = snapshot::gen_default(); // placeholder data
 
@@ -37,7 +37,7 @@ fn main() -> Result<(), String> {
     }
     if let Some(cli_deps) = cli_matches.values_of("dep") {
       for module_path in cli_deps {
-        let module_data = calcit_runner::load_module(module_path, entry_path.parent().unwrap())?;
+        let module_data = calcit::load_module(module_path, entry_path.parent().unwrap())?;
         for (k, v) in &module_data.files {
           snapshot.files.insert(k.to_owned(), v.to_owned());
         }
@@ -63,7 +63,7 @@ fn main() -> Result<(), String> {
 
     // attach modules
     for module_path in &snapshot.configs.modules {
-      let module_data = calcit_runner::load_module(module_path, entry_path.parent().unwrap())?;
+      let module_data = calcit::load_module(module_path, entry_path.parent().unwrap())?;
       for (k, v) in &module_data.files {
         snapshot.files.insert(k.to_owned(), v.to_owned());
       }
@@ -97,9 +97,9 @@ fn main() -> Result<(), String> {
 
   // make sure builtin classes are touched
   runner::preprocess::preprocess_ns_def(
-    calcit_runner::primes::CORE_NS.into(),
-    calcit_runner::primes::BUILTIN_CLASSES_ENTRY.into(),
-    calcit_runner::primes::BUILTIN_CLASSES_ENTRY.into(),
+    calcit::primes::CORE_NS.into(),
+    calcit::primes::BUILTIN_CLASSES_ENTRY.into(),
+    calcit::primes::BUILTIN_CLASSES_ENTRY.into(),
     None,
     check_warnings,
     &rpds::List::new_sync(),
@@ -108,7 +108,7 @@ fn main() -> Result<(), String> {
 
   let started_time = Instant::now();
 
-  let v = calcit_runner::run_program(entries.init_ns.to_owned(), entries.init_def, TernaryTreeList::Empty).map_err(|e| {
+  let v = calcit::run_program(entries.init_ns.to_owned(), entries.init_def, TernaryTreeList::Empty).map_err(|e| {
     for w in e.warnings {
       eprintln!("{}", w);
     }
