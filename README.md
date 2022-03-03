@@ -16,14 +16,14 @@ _TODO_
 
 ```bash
 cargo build --target wasm32-wasi
-wasmer run --mapdir examples/:examples/ target/wasm32-wasi/debug/wasi-calcit.wasm
+wasmer run --mapdir examples/:examples/ target/wasm32-wasi/debug/wasi-calcit.wasm -- examples/compact.cirru
 ```
 
 or
 
 ```bash
-cargo build --target wasm32-wasi
+cargo build --target wasm32-wasi --release
 cp target/wasm32-wasi/release/wasi-calcit.wasm builds
-# wasmer run --mapdir examples/:examples/ builds/wasi-calcit.wasm
-wapm run wcr --dir examples/
+wapm run wcr -e 'range 100'
+wapm run wcr --dir=examples examples/compact.cirru
 ```

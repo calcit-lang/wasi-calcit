@@ -1,0 +1,36 @@
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+name: Test
+
+jobs:
+  build_and_test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          components: clippy
+          override: true
+
+      - uses: Swatinem/rust-cache@v1
+
+      - run: rustup target add wasm32-wasi
+      - run: cargo run examples/compact.cirru
+      - run: cargo build --target wasm32-wasi
+
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features

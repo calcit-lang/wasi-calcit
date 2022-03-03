@@ -5,7 +5,6 @@ description = "CLI for Calcit language"
 license = "MIT"
 
 [dependencies]
-"calcit/wasi-calcit" = "0.0.1"
 
 [[module]]
 name = "wasi-calcit"
