@@ -10,3 +10,6 @@
           defn main! ()
             println "|doing work"
             + 1 2
+        |reload! $ quote
+          defn reload! ()
+            println "|TODO"
