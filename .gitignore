@@ -2,3 +2,5 @@
 /builds/
 
 wapm_packages
+
+js-out/

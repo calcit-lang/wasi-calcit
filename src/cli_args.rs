@@ -6,6 +6,20 @@ pub fn parse_cli<'a>() -> clap::ArgMatches<'a> {
     .author("Jon. <jiyinyiyong@gmail.com>")
     .about("Calcit Runner")
     .arg(
+      clap::Arg::with_name("emit-js")
+        .help("emit js rather than interpreting")
+        .default_value("false")
+        .long("emit-js")
+        .takes_value(false),
+    )
+    .arg(
+      clap::Arg::with_name("emit-ir")
+        .help("emit EDN representation of program to program-ir.cirru")
+        .default_value("false")
+        .long("emit-ir")
+        .takes_value(false),
+    )
+    .arg(
       clap::Arg::with_name("eval")
         .help("eval a snippet")
         .short("e")
@@ -18,6 +32,12 @@ pub fn parse_cli<'a>() -> clap::ArgMatches<'a> {
         .short("d")
         .long("dep")
         .multiple(true)
+        .takes_value(true),
+    )
+    .arg(
+      clap::Arg::with_name("emit-path")
+        .help("emit directory for js, defaults to `js-out/`")
+        .long("emit-path")
         .takes_value(true),
     )
     .arg(
