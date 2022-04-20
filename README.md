@@ -2,8 +2,8 @@
 
 > Calcit(`0.5.33`) package on WASI, bundled [Calcit-rs](https://github.com/calcit-lang/calcit) without watcher and injections.
 
-- APIs http://apis.calcit-lang.org/
-- Guide http://guide.calcit-lang.org/
+- APIs <http://apis.calcit-lang.org/>
+- Guide <http://guide.calcit-lang.org/>
 
 ### Usage
 
@@ -34,4 +34,4 @@ wapm run wcr --dir=./ examples/compact.cirru --emit-js
 
 ### More...
 
-Check out https://github.com/calcit-lang/calcit-wasm-play for browser version.
+Check out <https://github.com/calcit-lang/calcit-wasm-play> for browser version.
