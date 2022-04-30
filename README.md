@@ -1,6 +1,6 @@
 ## WASI Calcit
 
-> Calcit(`0.5.33`) package on WASI, bundled [Calcit-rs](https://github.com/calcit-lang/calcit) without watcher and injections.
+> Calcit(`0.5.41`) package on WASI, bundled [Calcit-rs](https://github.com/calcit-lang/calcit) without watcher and injections.
 
 - APIs <http://apis.calcit-lang.org/>
 - Guide <http://guide.calcit-lang.org/>
