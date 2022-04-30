@@ -25,8 +25,9 @@ pub struct CLIOptions {
 fn main() -> Result<(), String> {
   builtins::effects::init_effects_states();
 
-  builtins::register_import_proc("echo", echo);
-  builtins::register_import_proc("println", echo);
+  builtins::register_import_proc("echo", calcit_println);
+  builtins::register_import_proc("println", calcit_println);
+  builtins::register_import_proc("eprintln", calcit_eprintln);
 
   let cli_matches = cli_args::parse_cli();
   let cli_options = CLIOptions {
@@ -273,7 +274,7 @@ fn throw_on_js_warnings(warnings: &[String], js_file_path: &Path) -> Result<(), 
   }
 }
 
-pub fn echo(xs: &CalcitItems, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
+pub fn calcit_println(xs: &CalcitItems, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
   let mut s = String::from("");
   for (idx, x) in xs.into_iter().enumerate() {
     if idx > 0 {
@@ -282,5 +283,17 @@ pub fn echo(xs: &CalcitItems, _call_stack: &CallStackList) -> Result<Calcit, Cal
     s.push_str(&x.turn_string());
   }
   println!("{}", s);
+  Ok(Calcit::Nil)
+}
+
+pub fn calcit_eprintln(xs: &CalcitItems, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
+  let mut s = String::from("");
+  for (idx, x) in xs.into_iter().enumerate() {
+    if idx > 0 {
+      s.push(' ');
+    }
+    s.push_str(&x.turn_string());
+  }
+  eprintln!("{}", s);
   Ok(Calcit::Nil)
 }
