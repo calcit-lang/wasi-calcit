@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use calcit::primes::LocatedWarning;
 use im_ternary_tree::TernaryTreeList;
 
 use calcit::{
@@ -33,7 +34,7 @@ fn main() -> Result<(), String> {
   let cli_options = CLIOptions {
     // has default value
     entry_path: Path::new(cli_matches.value_of("input").unwrap()).to_owned(),
-    emit_path: cli_matches.value_of("emit-path").or(Some("js-out")).unwrap().to_owned(),
+    emit_path: cli_matches.value_of("emit-path").unwrap_or("js-out").to_owned(),
     emit_js: cli_matches.is_present("emit-js"),
     emit_ir: cli_matches.is_present("emit-ir"),
   };
@@ -72,7 +73,7 @@ fn main() -> Result<(), String> {
 
     // config in entry will overwrite default configs
     if let Some(entry) = cli_matches.value_of("entry") {
-      if snapshot.entries.contains_key(&*entry) {
+      if snapshot.entries.contains_key(entry) {
         println!("running entry: {}", entry);
         snapshot.configs = snapshot.entries[entry].to_owned();
       } else {
@@ -88,8 +89,8 @@ fn main() -> Result<(), String> {
       }
     }
   }
-  let init_fn = cli_matches.value_of("init-fn").or(Some(&snapshot.configs.init_fn)).unwrap();
-  let reload_fn = cli_matches.value_of("reload-fn").or(Some(&snapshot.configs.reload_fn)).unwrap();
+  let init_fn = cli_matches.value_of("init-fn").unwrap_or(&snapshot.configs.init_fn);
+  let reload_fn = cli_matches.value_of("reload-fn").unwrap_or(&snapshot.configs.reload_fn);
   let (init_ns, init_def) = util::string::extract_ns_def(init_fn)?;
   let (reload_ns, reload_def) = util::string::extract_ns_def(reload_fn)?;
   let entries: ProgramEntries = ProgramEntries {
@@ -112,7 +113,7 @@ fn main() -> Result<(), String> {
     *prgm = program::extract_program_data(&snapshot)?;
   }
 
-  let check_warnings: &RefCell<Vec<String>> = &RefCell::new(vec![]);
+  let check_warnings: &RefCell<Vec<_>> = &RefCell::new(vec![]);
 
   // make sure builtin classes are touched
   runner::preprocess::preprocess_ns_def(
@@ -176,7 +177,7 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
 
   let js_file_path = code_emit_path.join(format!("{}.js", COMPILE_ERRORS_FILE)); // TODO mjs_mode
 
-  let check_warnings: &RefCell<Vec<String>> = &RefCell::new(vec![]);
+  let check_warnings: &RefCell<Vec<LocatedWarning>> = &RefCell::new(vec![]);
   gen_stack::clear_stack();
 
   // preprocess to init
@@ -191,7 +192,7 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
     Ok(_) => (),
     Err(failure) => {
       eprintln!("\nfailed preprocessing, {}", failure);
-      call_stack::display_stack(&failure.msg, &failure.stack)?;
+      call_stack::display_stack(&failure.msg, &failure.stack, failure.location.as_ref())?;
 
       let _ = fs::write(
         &js_file_path,
@@ -216,7 +217,7 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
     Ok(_) => (),
     Err(failure) => {
       eprintln!("\nfailed preprocessing, {}", failure);
-      call_stack::display_stack(&failure.msg, &failure.stack)?;
+      call_stack::display_stack(&failure.msg, &failure.stack, failure.location.as_ref())?;
       return Err(failure.msg);
     }
   }
@@ -231,11 +232,11 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
   }
 
   if ir_mode {
-    match codegen::gen_ir::emit_ir(&*entries.init_fn, &*entries.reload_fn, emit_path) {
+    match codegen::gen_ir::emit_ir(&entries.init_fn, &entries.reload_fn, emit_path) {
       Ok(_) => (),
       Err(failure) => {
         eprintln!("\nfailed codegen, {}", failure);
-        call_stack::display_stack(&failure, &gen_stack::get_gen_stack())?;
+        call_stack::display_stack(&failure, &gen_stack::get_gen_stack(), None)?;
         return Err(failure);
       }
     }
@@ -245,7 +246,7 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
       Ok(_) => (),
       Err(failure) => {
         eprintln!("\nfailed codegen, {}", failure);
-        call_stack::display_stack(&failure, &gen_stack::get_gen_stack())?;
+        call_stack::display_stack(&failure, &gen_stack::get_gen_stack(), None)?;
         return Err(failure);
       }
     }
@@ -255,7 +256,7 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
   Ok(())
 }
 
-fn throw_on_js_warnings(warnings: &[String], js_file_path: &Path) -> Result<(), String> {
+fn throw_on_js_warnings(warnings: &[LocatedWarning], js_file_path: &Path) -> Result<(), String> {
   if !warnings.is_empty() {
     let mut content: String = String::from("");
     for message in warnings {
@@ -263,7 +264,7 @@ fn throw_on_js_warnings(warnings: &[String], js_file_path: &Path) -> Result<(), 
       content = format!("{}\n{}", content, message);
     }
 
-    let _ = fs::write(&js_file_path, format!("export default \"{}\";", content.trim().escape_default()));
+    let _ = fs::write(js_file_path, format!("export default \"{}\";", content.trim().escape_default()));
     Err(format!(
       "Found {} warnings, codegen blocked. errors in {}.js",
       warnings.len(),
