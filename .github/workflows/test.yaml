@@ -16,15 +16,14 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly
           components: clippy
-          override: true
 
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
 
       - run: rustup target add wasm32-wasi
       - run: cargo run examples/compact.cirru
