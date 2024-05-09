@@ -3,16 +3,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use calcit::primes::LocatedWarning;
-use im_ternary_tree::TernaryTreeList;
+use calcit::calcit::LocatedWarning;
+use dirs::home_dir;
 
 use calcit::{
-  builtins, call_stack,
+  builtins,
+  calcit::{Calcit, CalcitErr},
+  call_stack,
   call_stack::CallStackList,
   cli_args, codegen,
   codegen::emit_js::gen_stack,
   codegen::COMPILE_ERRORS_FILE,
-  primes::{Calcit, CalcitErr, CalcitItems},
   program, runner, snapshot, util, ProgramEntries,
 };
 
@@ -44,7 +45,11 @@ fn main() -> Result<(), String> {
 
   let core_snapshot = calcit::load_core_snapshot()?;
 
-  let mut snapshot = snapshot::gen_default(); // placeholder data
+  let mut snapshot = snapshot::Snapshot::default(); // placeholder data
+
+  let module_folder = home_dir()
+    .map(|buf| buf.as_path().join(".config/calcit/modules/"))
+    .expect("failed to load $HOME");
 
   if let Some(snippet) = cli_matches.value_of("eval") {
     eval_once = true;
@@ -56,7 +61,7 @@ fn main() -> Result<(), String> {
     }
     if let Some(cli_deps) = cli_matches.values_of("dep") {
       for module_path in cli_deps {
-        let module_data = calcit::load_module(module_path, cli_options.entry_path.parent().unwrap())?;
+        let module_data = calcit::load_module(module_path, cli_options.entry_path.parent().unwrap(), &module_folder)?;
         for (k, v) in &module_data.files {
           snapshot.files.insert(k.to_owned(), v.to_owned());
         }
@@ -83,7 +88,7 @@ fn main() -> Result<(), String> {
 
     // attach modules
     for module_path in &snapshot.configs.modules {
-      let module_data = calcit::load_module(module_path, cli_options.entry_path.parent().unwrap())?;
+      let module_data = calcit::load_module(module_path, cli_options.entry_path.parent().unwrap(), &module_folder)?;
       for (k, v) in &module_data.files {
         snapshot.files.insert(k.to_owned(), v.to_owned());
       }
@@ -117,12 +122,10 @@ fn main() -> Result<(), String> {
 
   // make sure builtin classes are touched
   runner::preprocess::preprocess_ns_def(
-    calcit::primes::CORE_NS.into(),
-    calcit::primes::BUILTIN_CLASSES_ENTRY.into(),
-    calcit::primes::BUILTIN_CLASSES_ENTRY.into(),
-    None,
+    calcit::calcit::CORE_NS,
+    calcit::calcit::BUILTIN_CLASSES_ENTRY,
     check_warnings,
-    &rpds::List::new_sync(),
+    &CallStackList::default(),
   )
   .map_err(|e| e.msg)?;
 
@@ -133,7 +136,7 @@ fn main() -> Result<(), String> {
   } else {
     let started_time = Instant::now();
 
-    let v = calcit::run_program(entries.init_ns.to_owned(), entries.init_def, TernaryTreeList::Empty).map_err(|e| {
+    let v = calcit::run_program(entries.init_ns.to_owned(), entries.init_def, &[]).map_err(|e| {
       for w in e.warnings {
         eprintln!("{}", w);
       }
@@ -181,14 +184,7 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
   gen_stack::clear_stack();
 
   // preprocess to init
-  match runner::preprocess::preprocess_ns_def(
-    entries.init_ns.to_owned(),
-    entries.init_def.to_owned(),
-    entries.init_def.to_owned(),
-    None,
-    check_warnings,
-    &rpds::List::new_sync(),
-  ) {
+  match runner::preprocess::preprocess_ns_def(&entries.init_ns, &entries.init_def, check_warnings, &CallStackList::default()) {
     Ok(_) => (),
     Err(failure) => {
       eprintln!("\nfailed preprocessing, {}", failure);
@@ -206,14 +202,7 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
   }
 
   // preprocess to reload
-  match runner::preprocess::preprocess_ns_def(
-    entries.reload_ns.to_owned(),
-    entries.reload_def.to_owned(),
-    entries.init_def.to_owned(),
-    None,
-    check_warnings,
-    &rpds::List::new_sync(),
-  ) {
+  match runner::preprocess::preprocess_ns_def(&entries.reload_ns, &entries.reload_def, check_warnings, &CallStackList::default()) {
     Ok(_) => (),
     Err(failure) => {
       eprintln!("\nfailed preprocessing, {}", failure);
@@ -275,7 +264,7 @@ fn throw_on_js_warnings(warnings: &[LocatedWarning], js_file_path: &Path) -> Res
   }
 }
 
-pub fn calcit_println(xs: &CalcitItems, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
+pub fn calcit_println(xs: Vec<Calcit>, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
   let mut s = String::from("");
   for (idx, x) in xs.into_iter().enumerate() {
     if idx > 0 {
@@ -287,7 +276,7 @@ pub fn calcit_println(xs: &CalcitItems, _call_stack: &CallStackList) -> Result<C
   Ok(Calcit::Nil)
 }
 
-pub fn calcit_eprintln(xs: &CalcitItems, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
+pub fn calcit_eprintln(xs: Vec<Calcit>, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
   let mut s = String::from("");
   for (idx, x) in xs.into_iter().enumerate() {
     if idx > 0 {
