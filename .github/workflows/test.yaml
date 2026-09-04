@@ -6,30 +6,35 @@ on:
 
 name: Test
 
+permissions:
+  contents: read
+
 jobs:
   build_and_test:
     name: Test
     runs-on: ubuntu-latest
-    permissions:
-      checks: write
-      contents: read
-      pull-requests: write
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0
         with:
-          toolchain: nightly
-          components: clippy
+          toolchain: 1.97.1
+          components: clippy,rustfmt
+          targets: wasm32-wasip1
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      - run: rustup target add wasm32-wasi
-      - run: cargo run examples/compact.cirru
-      - run: cargo build --target wasm32-wasi
+      - name: Validate Rust host
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
 
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+      - name: Smoke test Calcit modes
+        run: |
+          cargo run -- --once examples/calcit.cirru
+          cargo run -- --once -e '+ 1 2'
+          cargo run -- --once --emit-js --emit-path /tmp/wasi-calcit-js examples/calcit.cirru
+
+      - name: Build WASI Preview 1 binary
+        run: cargo build --target wasm32-wasip1

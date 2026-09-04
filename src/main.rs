@@ -1,17 +1,20 @@
 use std::cell::RefCell;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 use calcit::calcit::LocatedWarning;
-use dirs::home_dir;
+use calcit::util::string::strip_shebang;
+
+mod cli_args;
 
 use calcit::{
   builtins,
   calcit::{Calcit, CalcitErr},
   call_stack,
   call_stack::CallStackList,
-  cli_args, codegen,
+  codegen,
   codegen::emit_js::gen_stack,
   codegen::COMPILE_ERRORS_FILE,
   program, runner, snapshot, util, ProgramEntries,
@@ -41,66 +44,55 @@ fn main() -> Result<(), String> {
   };
   let mut eval_once = cli_matches.is_present("once");
 
-  println!("calcit version: {}", cli_args::CALCIT_VERSION);
+  println!("calcit version: {}", calcit::cli_args::CALCIT_VERSION);
 
   let core_snapshot = calcit::load_core_snapshot()?;
 
   let mut snapshot = snapshot::Snapshot::default(); // placeholder data
 
-  let module_folder = home_dir()
-    .map(|buf| buf.as_path().join(".config/calcit/modules/"))
-    .expect("failed to load $HOME");
+  let base_dir = cli_options.entry_path.parent().unwrap_or_else(|| Path::new("."));
+  let module_folder = calcit::project_module_folder(base_dir);
 
   if let Some(snippet) = cli_matches.value_of("eval") {
     eval_once = true;
-    match snapshot::create_file_from_snippet(snippet) {
-      Ok(main_file) => {
-        snapshot.files.insert(String::from("app.main").into(), main_file);
-      }
-      Err(e) => return Err(e),
-    }
+    let main_file = snapshot::create_file_from_snippet(snippet)?;
+    snapshot.files.insert(String::from("app.main"), main_file);
     if let Some(cli_deps) = cli_matches.values_of("dep") {
       for module_path in cli_deps {
-        let module_data = calcit::load_module(module_path, cli_options.entry_path.parent().unwrap(), &module_folder)?;
-        for (k, v) in &module_data.files {
-          snapshot.files.insert(k.to_owned(), v.to_owned());
-        }
+        let module_data = calcit::load_module(module_path, base_dir, &module_folder)?;
+        calcit::merge_project_module_files(&mut snapshot, &module_data, module_path)?;
       }
     }
   } else {
     // load entry file
-    let content =
+    let mut content =
       fs::read_to_string(&cli_options.entry_path).unwrap_or_else(|_| panic!("expected Cirru snapshot: {:?}", cli_options.entry_path));
+    strip_shebang(&mut content);
 
-    let data = cirru_edn::parse(&content)?;
+    let data = cirru_edn::parse(&content).map_err(|e| e.to_string())?;
     // println!("reading: {}", content);
     snapshot = snapshot::load_snapshot_data(&data, cli_options.entry_path.to_str().unwrap())?;
 
-    // config in entry will overwrite default configs
-    if let Some(entry) = cli_matches.value_of("entry") {
-      if snapshot.entries.contains_key(entry) {
-        println!("running entry: {}", entry);
-        snapshot.configs = snapshot.entries[entry].to_owned();
-      } else {
-        return Err(format!("unknown entry `{}` among {:?}", entry, snapshot.entries.keys()));
-      }
+    snapshot.select_entry(cli_matches.value_of("entry"))?;
+    if cli_matches.value_of("entry").is_some() {
+      println!("running entry: {}", snapshot.active_entry_name());
     }
 
     // attach modules
-    for module_path in &snapshot.configs.modules {
-      let module_data = calcit::load_module(module_path, cli_options.entry_path.parent().unwrap(), &module_folder)?;
-      for (k, v) in &module_data.files {
-        snapshot.files.insert(k.to_owned(), v.to_owned());
-      }
+    let module_paths = snapshot.active_entry()?.modules.clone();
+    for module_path in &module_paths {
+      let module_data = calcit::load_module(module_path, base_dir, &module_folder)?;
+      calcit::merge_project_module_files(&mut snapshot, &module_data, module_path)?;
     }
   }
-  let init_fn = cli_matches.value_of("init-fn").unwrap_or(&snapshot.configs.init_fn);
-  let reload_fn = cli_matches.value_of("reload-fn").unwrap_or(&snapshot.configs.reload_fn);
+  let selected_entry = snapshot.active_entry()?.clone();
+  let init_fn = cli_matches.value_of("init-fn").unwrap_or(&selected_entry.init_fn);
+  let reload_fn = cli_matches.value_of("reload-fn").unwrap_or(&selected_entry.reload_fn);
   let (init_ns, init_def) = util::string::extract_ns_def(init_fn)?;
   let (reload_ns, reload_def) = util::string::extract_ns_def(reload_fn)?;
   let entries: ProgramEntries = ProgramEntries {
-    init_fn: init_fn.into(),
-    reload_fn: reload_fn.into(),
+    init_fn: Arc::from(init_fn),
+    reload_fn: Arc::from(reload_fn),
     init_def: init_def.into(),
     init_ns: init_ns.into(),
     reload_ns: reload_ns.into(),
@@ -121,9 +113,9 @@ fn main() -> Result<(), String> {
   let check_warnings: &RefCell<Vec<_>> = &RefCell::new(vec![]);
 
   // make sure builtin classes are touched
-  runner::preprocess::preprocess_ns_def(
+  runner::preprocess::ensure_ns_def_compiled(
     calcit::calcit::CORE_NS,
-    calcit::calcit::BUILTIN_CLASSES_ENTRY,
+    calcit::calcit::BUILTIN_IMPLS_ENTRY,
     check_warnings,
     &CallStackList::default(),
   )
@@ -137,7 +129,7 @@ fn main() -> Result<(), String> {
     let started_time = Instant::now();
 
     let v = calcit::run_program(entries.init_ns.to_owned(), entries.init_def, &[]).map_err(|e| {
-      for w in e.warnings {
+      for w in e.warnings.iter() {
         eprintln!("{}", w);
       }
       e.msg
@@ -178,13 +170,13 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
     let _ = fs::create_dir(code_emit_path);
   }
 
-  let js_file_path = code_emit_path.join(format!("{}.js", COMPILE_ERRORS_FILE)); // TODO mjs_mode
+  let js_file_path = code_emit_path.join(format!("{}.mjs", COMPILE_ERRORS_FILE));
 
   let check_warnings: &RefCell<Vec<LocatedWarning>> = &RefCell::new(vec![]);
   gen_stack::clear_stack();
 
   // preprocess to init
-  match runner::preprocess::preprocess_ns_def(&entries.init_ns, &entries.init_def, check_warnings, &CallStackList::default()) {
+  match runner::preprocess::ensure_ns_def_compiled(&entries.init_ns, &entries.init_def, check_warnings, &CallStackList::default()) {
     Ok(_) => (),
     Err(failure) => {
       eprintln!("\nfailed preprocessing, {}", failure);
@@ -202,7 +194,7 @@ fn run_codegen(entries: &ProgramEntries, emit_path: &str, ir_mode: bool) -> Resu
   }
 
   // preprocess to reload
-  match runner::preprocess::preprocess_ns_def(&entries.reload_ns, &entries.reload_def, check_warnings, &CallStackList::default()) {
+  match runner::preprocess::ensure_ns_def_compiled(&entries.reload_ns, &entries.reload_def, check_warnings, &CallStackList::default()) {
     Ok(_) => (),
     Err(failure) => {
       eprintln!("\nfailed preprocessing, {}", failure);
@@ -264,6 +256,7 @@ fn throw_on_js_warnings(warnings: &[LocatedWarning], js_file_path: &Path) -> Res
   }
 }
 
+#[allow(clippy::result_large_err)]
 pub fn calcit_println(xs: Vec<Calcit>, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
   let mut s = String::from("");
   for (idx, x) in xs.into_iter().enumerate() {
@@ -276,6 +269,7 @@ pub fn calcit_println(xs: Vec<Calcit>, _call_stack: &CallStackList) -> Result<Ca
   Ok(Calcit::Nil)
 }
 
+#[allow(clippy::result_large_err)]
 pub fn calcit_eprintln(xs: Vec<Calcit>, _call_stack: &CallStackList) -> Result<Calcit, CalcitErr> {
   let mut s = String::from("");
   for (idx, x) in xs.into_iter().enumerate() {
