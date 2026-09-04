@@ -1,6 +1,6 @@
 pub const CALCIT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn parse_cli<'a>() -> clap::ArgMatches<'a> {
+pub fn parse_cli() -> clap::ArgMatches {
   clap::App::new("Calcit Runner")
     .version(CALCIT_VERSION)
     .author("Jon. <jiyinyiyong@gmail.com>")
@@ -8,28 +8,32 @@ pub fn parse_cli<'a>() -> clap::ArgMatches<'a> {
     .arg(
       clap::Arg::with_name("emit-js")
         .help("emit js rather than interpreting")
-        .default_value("false")
         .long("emit-js")
         .takes_value(false),
     )
     .arg(
       clap::Arg::with_name("emit-ir")
         .help("emit EDN representation of program to program-ir.cirru")
-        .default_value("false")
         .long("emit-ir")
+        .takes_value(false),
+    )
+    .arg(
+      clap::Arg::with_name("once")
+        .help("run once and exit")
+        .long("once")
         .takes_value(false),
     )
     .arg(
       clap::Arg::with_name("eval")
         .help("eval a snippet")
-        .short("e")
+        .short('e')
         .long("eval")
         .takes_value(true),
     )
     .arg(
       clap::Arg::with_name("dep")
         .help("add dependency")
-        .short("d")
+        .short('d')
         .long("dep")
         .multiple(true)
         .takes_value(true),
@@ -60,8 +64,8 @@ pub fn parse_cli<'a>() -> clap::ArgMatches<'a> {
     )
     .arg(
       clap::Arg::with_name("input")
-        .help("entry file path, defaults to compact.cirru")
-        .default_value("compact.cirru")
+        .help("entry file path, defaults to calcit.cirru")
+        .default_value("calcit.cirru")
         .index(1),
     )
     .get_matches()

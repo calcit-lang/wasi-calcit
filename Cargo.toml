@@ -2,12 +2,11 @@
 name = "wasi-calcit"
 version = "0.0.0"
 edition = "2021"
+rust-version = "1.97"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-calcit = "0.8.50"
-rpds = "0.13.0"
-im_ternary_tree = "0.0.18"
-cirru_edn = "0.6.3"
-dirs = "5.0.1"
+calcit = "=0.13.77"
+cirru_edn = "0.8.0"
+clap = "3.2.25"
