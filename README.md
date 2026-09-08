@@ -10,7 +10,7 @@
 ```bash
 wapm install calcit/wasi-calcit
 
-wcr --dir=. # runs `calcit.cirru` by default
+wcr # runs `calcit.cirru` by default; grant directories in the WASI runtime
 
 wcr -e 'range 100' # eval mode
 ```
@@ -22,10 +22,26 @@ cargo +1.97.1 build --target wasm32-wasip1
 wasmer run --mapdir examples/:examples/ target/wasm32-wasip1/debug/wasi-calcit.wasm -- examples/calcit.cirru
 ```
 
-> Calcit 0.13.77 currently builds for `wasm32-wasip1`, but execution is blocked
-> by [calcit-lang/calcit#763](https://github.com/calcit-lang/calcit/issues/763),
-> an upstream preprocessing memory trap also reproduced with the official
-> `cr-wasm` binary.
+The host reserves a 4 MiB WASI shadow stack when linking its binary. The
+wasm-ld default 1 MiB stack is insufficient for bundled-core preprocessing
+([calcit#763](https://github.com/calcit-lang/calcit/issues/763)). This must be
+set by this host: the dependency's `cr-wasm` binary link arguments do not
+apply to downstream binaries.
+
+Use Wasmtime 18.0.3 (the original reproducer) to verify actual execution:
+
+```bash
+cargo +1.97.1 build --target wasm32-wasip1
+bash scripts/test-wasi.sh
+```
+
+The script checks snapshot and eval results, both expected to be `3`.
+`WASMTIME_BIN` can select a specific installation. WASI directory access is
+granted by the runtime's `--dir .::/workspace` option, not a `wcr --dir`
+application flag.
+
+宿主在自己的链接阶段保留 4 MiB WASI 栈，并通过 Wasmtime 实际执行 Snapshot
+和 eval 回归。目录授权属于 WASI runtime，依赖二进制的链接参数不会传递给宿主。
 
 or:
 
@@ -33,8 +49,8 @@ or:
 cargo +1.97.1 build --target wasm32-wasip1 --release
 cp target/wasm32-wasip1/release/wasi-calcit.wasm builds
 wapm run wcr -e 'range 100'
-wapm run wcr --dir=examples examples/calcit.cirru
-wapm run wcr --dir=./ examples/calcit.cirru --emit-js
+wapm run wcr examples/calcit.cirru
+wapm run wcr examples/calcit.cirru --emit-js
 ```
 
 ### More...
