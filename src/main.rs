@@ -247,7 +247,7 @@ fn throw_on_js_warnings(warnings: &[LocatedWarning], js_file_path: &Path) -> Res
 
     let _ = fs::write(js_file_path, format!("export default \"{}\";", content.trim().escape_default()));
     Err(format!(
-      "Found {} warnings, codegen blocked. errors in {}.js",
+      "Found {} warnings, codegen blocked. errors in {}.mjs",
       warnings.len(),
       COMPILE_ERRORS_FILE,
     ))

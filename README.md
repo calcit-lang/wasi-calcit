@@ -19,7 +19,7 @@ wcr -e 'range 100' # eval mode
 
 ```bash
 cargo +1.97.1 build --target wasm32-wasip1
-wasmer run --mapdir examples/:examples/ target/wasm32-wasip1/debug/wasi-calcit.wasm -- examples/calcit.cirru
+wasmer run target/wasm32-wasip1/debug/wasi-calcit.wasm --volume .:/workspace -- /workspace/examples/calcit.cirru
 ```
 
 The host reserves a 4 MiB WASI shadow stack when linking its binary. The
