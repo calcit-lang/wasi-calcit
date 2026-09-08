@@ -6,30 +6,45 @@ on:
 
 name: Test
 
+permissions:
+  contents: read
+
 jobs:
   build_and_test:
     name: Test
     runs-on: ubuntu-latest
-    permissions:
-      checks: write
-      contents: read
-      pull-requests: write
-
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          toolchain: nightly
-          components: clippy
+          persist-credentials: false
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Install exact Rust toolchain
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt --target wasm32-wasip1
+          rustup default 1.97.1
 
-      - run: rustup target add wasm32-wasi
-      - run: cargo run examples/compact.cirru
-      - run: cargo build --target wasm32-wasi
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+      - name: Validate Rust host
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Smoke test Calcit modes
+        run: |
+          cargo run -- --once examples/calcit.cirru
+          cargo run -- --once -e '+ 1 2'
+          cargo run -- --once --emit-js --emit-path /tmp/wasi-calcit-js examples/calcit.cirru
+
+      - name: Build WASI Preview 1 binary
+        run: cargo build --target wasm32-wasip1
+
+      - name: Execute WASI Preview 1 regressions
+        timeout-minutes: 3
+        run: |
+          archive="$RUNNER_TEMP/wasmtime-v18.0.3-x86_64-linux.tar.xz"
+          curl --fail --location --retry 3 --output "$archive" https://github.com/bytecodealliance/wasmtime/releases/download/v18.0.3/wasmtime-v18.0.3-x86_64-linux.tar.xz
+          printf '%s  %s\n' '1252dbd077fcdfc54da17a45860dc90c558f7f4d9301143bec9f59ce548301d8' "$archive" | sha256sum --check
+          tar -xJf "$archive" -C "$RUNNER_TEMP"
+          WASMTIME_BIN="$RUNNER_TEMP/wasmtime-v18.0.3-x86_64-linux/wasmtime" bash scripts/test-wasi.sh
